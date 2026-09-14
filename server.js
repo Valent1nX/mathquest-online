@@ -137,12 +137,16 @@ wss.on('connection', ws=>{
       const ship=shipAt(opp.fleet,i);let hit=false,sunk=false;
       if(ship){ship.hits.add(i);hit=true;sunk=ship.hits.size===ship.cells.size;}
       room.lastShot={role:player.role,i,hit,sunk};
-      send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:opp.role});
       if(allSunk(opp.fleet)){
         room.started=false;room.over=true;
+        send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:player.role});
+        send(opp.ws,{type:'battleShotAck',i,hit,sunk,turn:player.role});
         send(player.ws,{type:'battleResult',result:'win'});send(opp.ws,{type:'battleResult',result:'lose'});battleBroadcast(room);return;
       }
-      room.turn=opp.role;
+      // Classic Battleship: a hit lets the same player continue; a miss passes the turn.
+      room.turn=hit?player.role:opp.role;
+      send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:room.turn});
+      send(opp.ws,{type:'battleShotAck',i,hit,sunk,turn:room.turn});
       battleBroadcast(room);return;
     }
   });
