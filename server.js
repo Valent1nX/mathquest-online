@@ -48,13 +48,32 @@ function validFleet(fleet){
   }
   return seen.size===4;
 }
+function validPartialFleet(fleet){
+  if(!Array.isArray(fleet) || fleet.length>4) return false;
+  const counts={3:0,2:0,1:0};
+  const seen=new Set();
+  for(const cells of fleet){
+    if(!Array.isArray(cells) || ![1,2,3].includes(cells.length)) return false;
+    counts[cells.length]++;
+    if(counts[3]>1 || counts[2]>2 || counts[1]>1) return false;
+    if(cells.some(x=>!Number.isInteger(x)||x<0||x>=64||seen.has(x))) return false;
+    cells.forEach(x=>seen.add(x));
+    const rows=cells.map(x=>Math.floor(x/8)), cols=cells.map(x=>x%8);
+    const sameRow=rows.every(r=>r===rows[0]), sameCol=cols.every(c=>c===cols[0]);
+    if(cells.length>1 && !sameRow && !sameCol) return false;
+    const vals=(sameRow?cols:rows).slice().sort((a,b)=>a-b);
+    for(let i=1;i<vals.length;i++) if(vals[i]!==vals[i-1]+1) return false;
+  }
+  return true;
+}
+
 function shipAt(fleet, idx){ return fleet.find(s=>s.cells.includes(idx)); }
 function allSunk(fleet){ return fleet.every(s=>s.hits.size===s.cells.length); }
 function battleView(room, viewer){
   const me=room.players.find(p=>p.ws===viewer);
   if(!me) return;
   const opp=room.players.find(p=>p!==me);
-  send(viewer,{type:'battleState',started:room.started,turn:room.turn,ownShots:Array.from(me.shots),enemyShots:Array.from(me.enemyShots),enemyReady:!!opp?.ready,opponentReady:!!opp?.ready,lastShot:room.lastShot?{role:room.lastShot.role,i:room.lastShot.i,hit:!!room.lastShot.hit,sunk:!!room.lastShot.sunk}:null});
+  send(viewer,{type:'battleState',started:room.started,turn:room.turn,ownShots:Array.from(me.shots),enemyShots:Array.from(me.enemyShots),enemyReady:!!opp?.ready,opponentReady:!!opp?.ready,opponentFleet:!room.started&&opp?.fleet?opp.fleet.map(s=>Array.from(s.cells)):[],lastShot:room.lastShot?{role:room.lastShot.role,i:room.lastShot.i,hit:!!room.lastShot.hit,sunk:!!room.lastShot.sunk}:null});
 }
 function battleBroadcast(room){ for(const p of room.players) battleView(room,p.ws); }
 function removePlayer(ws){
@@ -126,11 +145,12 @@ wss.on('connection', ws=>{
     if(room.game==='battle' && (m.type==='battlePlace' || m.type==='battleReady')){
       if(room.started) return;
       if(m.type==='battlePlace'){
-        if(!Array.isArray(m.fleet) || !validFleet(m.fleet)) return;
+        if(!validPartialFleet(m.fleet)) return;
         player.fleet=m.fleet.slice().sort((a,b)=>b.length-a.length).map(cells=>({cells:new Set(cells),hits:new Set()}));
         player.ready=false;
-        battleBroadcast(room);
-        return;
+        const opp=room.players.find(p=>p!==player);
+        if(opp) send(opp.ws,{type:'battlePlacement',fleet:m.fleet,ready:false});
+        battleBroadcast(room);return;
       }
       if(player.ready) return;
       if(!validFleet(m.fleet)){send(ws,{type:'error',message:'Неправильна розстановка кораблів.'});return;}
@@ -163,6 +183,12 @@ wss.on('connection', ws=>{
   ws.on('error',()=>removePlayer(ws));
 });
 
+
+setInterval(()=>{for(const ws of wss.clients){if(ws.readyState===WebSocket.OPEN){try{ws.ping();}catch(_){}}}},20000);
+server.listen(PORT,'0.0.0.0',()=>console.log(`Math Quest online server on ${PORT}`));
+
+setInterval(()=>{for(const ws of wss.clients){if(ws.readyState===WebSocket.OPEN){try{ws.ping();}catch(_){}}}},20000);
+server.listen(PORT,'0.0.0.0',()=>console.log(`Math Quest online server on ${PORT}`));
 
 setInterval(()=>{for(const ws of wss.clients){if(ws.readyState===WebSocket.OPEN){try{ws.ping();}catch(_){}}}},20000);
 server.listen(PORT,'0.0.0.0',()=>console.log(`Math Quest online server on ${PORT}`));
