@@ -123,8 +123,16 @@ wss.on('connection', ws=>{
       else {room.turn=room.turn==='X'?'O':'X';broadcastRoom(room,{type:'tttState',board:room.board,turn:room.turn,over:false,size:room.tttSize,winLen:room.tttWinLen});}
       return;
     }
-    if(room.game==='battle' && m.type==='battleReady'){
-      if(room.started || player.ready) return;
+    if(room.game==='battle' && (m.type==='battlePlace' || m.type==='battleReady')){
+      if(room.started) return;
+      if(m.type==='battlePlace'){
+        if(!Array.isArray(m.fleet) || !validFleet(m.fleet)) return;
+        player.fleet=m.fleet.slice().sort((a,b)=>b.length-a.length).map(cells=>({cells:new Set(cells),hits:new Set()}));
+        player.ready=false;
+        battleBroadcast(room);
+        return;
+      }
+      if(player.ready) return;
       if(!validFleet(m.fleet)){send(ws,{type:'error',message:'Неправильна розстановка кораблів.'});return;}
       player.fleet=m.fleet.slice().sort((a,b)=>b.length-a.length).map(cells=>({cells:new Set(cells),hits:new Set()}));player.ready=true;
       if(room.players.length===2 && room.players.every(p=>p.ready)){room.started=true;room.turn='A';room.lastShot=null;}
@@ -155,9 +163,6 @@ wss.on('connection', ws=>{
   ws.on('error',()=>removePlayer(ws));
 });
 
-
-setInterval(()=>{for(const ws of wss.clients){if(ws.readyState===WebSocket.OPEN){try{ws.ping();}catch(_){}}}},20000);
-server.listen(PORT,'0.0.0.0',()=>console.log(`Math Quest online server on ${PORT}`));
 
 setInterval(()=>{for(const ws of wss.clients){if(ws.readyState===WebSocket.OPEN){try{ws.ping();}catch(_){}}}},20000);
 server.listen(PORT,'0.0.0.0',()=>console.log(`Math Quest online server on ${PORT}`));
