@@ -171,15 +171,14 @@ wss.on('connection', ws=>{
       room.lastShot={role:player.role,i,hit,sunk};
       if(allSunk(opp.fleet)){
         room.started=false;room.over=true;
-        player.battlePending=false;send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:player.role});
-        send(opp.ws,{type:'battleShotAck',i,hit,sunk,turn:player.role});
+        player.battlePending=false;send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:player.role,role:player.role});
+        send(opp.ws,{type:'battleState',started:false,turn:player.role,ownShots:Array.from(opp.shots),enemyShots:Array.from(opp.enemyShots),enemyReady:!!player.ready,opponentReady:!!player.ready,lastShot:room.lastShot?{role:room.lastShot.role,i:room.lastShot.i,hit:!!room.lastShot.hit,sunk:!!room.lastShot.sunk}:null,opponentFleet:[]});
         send(player.ws,{type:'battleResult',result:'win'});send(opp.ws,{type:'battleResult',result:'lose'});battleBroadcast(room);return;
       }
       // Math Quest online: every shot passes the turn to the other player.
       // This prevents the opponent from being locked out after a hit.
       room.turn=opp.role;player.battlePending=false;
-      send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:room.turn});
-      send(opp.ws,{type:'battleShotAck',i,hit,sunk,turn:room.turn});
+      send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:room.turn,role:player.role});
       battleBroadcast(room);return;
     }
   });
