@@ -101,11 +101,12 @@ wss.on('connection', ws=>{
       if(room.players.length>=2){send(ws,{type:'error',message:'Кімната вже заповнена.'});return;}
       if(room.players.some(p=>p.ws===ws)){send(ws,{type:'error',message:'Ти вже в цій кімнаті.'});return;}
       const role=game==='ttt'?(room.players.length===0?'X':'O'):(room.players.length===0?'A':'B');
-      const player={ws,role,ready:false,fleet:null,shots:new Set(),enemyShots:new Set()};
+      const player={ws,role,ready:false,fleet:null,shots:new Set(),enemyShots:new Set(),battlePending:false};
       room.players.push(player);ws.room=room;ws.role=role;
       send(ws,{type:m.action==='create'?'roomCreated':'roomJoined',game,code:c,role,size:room.tttSize,winLen:room.tttWinLen});
       if(room.players.length===1) send(ws,{type:'waiting',code:c});
       if(room.players.length===2){
+        broadcastRoom(room,{type:'roomReady',game:room.game,code:c,size:room.tttSize,winLen:room.tttWinLen});
         if(game==='ttt') broadcastRoom(room,{type:'tttState',board:room.board,turn:room.turn,over:false,size:room.tttSize,winLen:room.tttWinLen});
         else battleBroadcast(room);
       }
@@ -130,21 +131,21 @@ wss.on('connection', ws=>{
       battleBroadcast(room);return;
     }
     if(room.game==='battle' && m.type==='battleFire'){
-      if(!room.started || room.turn!==player.role) return;
+      if(!room.started || room.turn!==player.role || player.battlePending) return;
       const i=cleanNumber(m.i); if(i<0||i>=64||player.shots.has(i))return;
       const opp=room.players.find(p=>p!==player); if(!opp || !opp.fleet)return;
-      player.shots.add(i);opp.enemyShots.add(i);
+      player.battlePending=true;player.shots.add(i);opp.enemyShots.add(i);
       const ship=shipAt(opp.fleet,i);let hit=false,sunk=false;
       if(ship){ship.hits.add(i);hit=true;sunk=ship.hits.size===ship.cells.size;}
       room.lastShot={role:player.role,i,hit,sunk};
       if(allSunk(opp.fleet)){
         room.started=false;room.over=true;
-        send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:player.role});
+        player.battlePending=false;send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:player.role});
         send(opp.ws,{type:'battleShotAck',i,hit,sunk,turn:player.role});
         send(player.ws,{type:'battleResult',result:'win'});send(opp.ws,{type:'battleResult',result:'lose'});battleBroadcast(room);return;
       }
       // Classic Battleship: a hit lets the same player continue; a miss passes the turn.
-      room.turn=hit?player.role:opp.role;
+      room.turn=hit?player.role:opp.role;player.battlePending=false;
       send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:room.turn});
       send(opp.ws,{type:'battleShotAck',i,hit,sunk,turn:room.turn});
       battleBroadcast(room);return;
@@ -154,6 +155,9 @@ wss.on('connection', ws=>{
   ws.on('error',()=>removePlayer(ws));
 });
 
+
+setInterval(()=>{for(const ws of wss.clients){if(ws.readyState===WebSocket.OPEN){try{ws.ping();}catch(_){}}}},20000);
+server.listen(PORT,'0.0.0.0',()=>console.log(`Math Quest online server on ${PORT}`));
 
 setInterval(()=>{for(const ws of wss.clients){if(ws.readyState===WebSocket.OPEN){try{ws.ping();}catch(_){}}}},20000);
 server.listen(PORT,'0.0.0.0',()=>console.log(`Math Quest online server on ${PORT}`));
