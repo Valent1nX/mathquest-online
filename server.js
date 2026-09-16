@@ -68,8 +68,8 @@ function validPartialFleet(fleet){
   }
   return true;
 }
-function shipAt(fleet, idx){ return fleet.find(s=>s.cells.includes(idx)); }
-function allSunk(fleet){ return fleet.every(s=>s.hits.size===s.cells.length); }
+function shipAt(fleet, idx){ return fleet.find(s=>s.cells.has(idx)); }
+function allSunk(fleet){ return fleet.every(s=>s.hits.size===s.cells.size); }
 function battleView(room, viewer){
   const me=room.players.find(p=>p.ws===viewer);
   if(!me) return;
@@ -175,9 +175,8 @@ wss.on('connection', ws=>{
         send(opp.ws,{type:'battleState',started:false,turn:player.role,ownShots:Array.from(opp.shots),enemyShots:Array.from(opp.enemyShots),enemyReady:!!player.ready,opponentReady:!!player.ready,lastShot:room.lastShot?{role:room.lastShot.role,i:room.lastShot.i,hit:!!room.lastShot.hit,sunk:!!room.lastShot.sunk}:null,opponentFleet:[]});
         send(player.ws,{type:'battleResult',result:'win'});send(opp.ws,{type:'battleResult',result:'lose'});battleBroadcast(room);return;
       }
-      // Math Quest online: every shot passes the turn to the other player.
-      // This prevents the opponent from being locked out after a hit.
-      room.turn=opp.role;player.battlePending=false;
+      // Standard Battleship rule: a hit lets the shooter go again; a miss passes the turn.
+      room.turn=hit?player.role:opp.role;player.battlePending=false;
       send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:room.turn,role:player.role});
       battleBroadcast(room);return;
     }
