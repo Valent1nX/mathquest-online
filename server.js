@@ -103,7 +103,7 @@ wss.on('connection', ws=>{
   ws.on('message', raw=>{
     let m; try{m=JSON.parse(raw.toString())}catch{send(ws,{type:'error',message:'Невірне повідомлення.'});return;}
     if(m.type==='room'){
-      const game=m.game==='ttt'?'ttt':m.game==='battle'?'battle':null;
+      const game=m.game==='ttt'?'ttt':m.game==='battle'?'battle':m.game==='ck'?'ck':null;
       if(!game){send(ws,{type:'error',message:'Невідома гра.'});return;}
       let c=String(m.code||'').toUpperCase();
       if(m.action==='create') c=freshCode();
@@ -114,7 +114,7 @@ wss.on('connection', ws=>{
       let room=rooms.get(c);
       if(m.action==='create'){
         const size=game==='ttt'?Math.min(5,Math.max(3,Number(m.settings?.size)||3)):null;
-        room={code:c,game,tttSize:size,tttWinLen:game==='ttt'?(size===3?3:4):null,players:[],board:game==='ttt'?Array(size*size).fill(''):null,turn:game==='ttt'?'X':'A',over:false,started:false,lastShot:null};
+        room={code:c,game,tttSize:size,tttWinLen:game==='ttt'?(size===3?3:4):null,players:[],board:game==='ttt'?Array(size*size).fill(''):null,turn:game==='ttt'?'X':game==='ck'?'A':'A',over:false,started:false,lastShot:null,checkersState:null};
         rooms.set(c,room);
       }
       if(room.game!==game){send(ws,{type:'error',message:'Ця кімната для іншої гри.'});return;}
@@ -128,7 +128,8 @@ wss.on('connection', ws=>{
       if(room.players.length===2){
         broadcastRoom(room,{type:'roomReady',game:room.game,code:c,size:room.tttSize,winLen:room.tttWinLen});
         if(game==='ttt') broadcastRoom(room,{type:'tttState',board:room.board,turn:room.turn,over:false,size:room.tttSize,winLen:room.tttWinLen});
-        else battleBroadcast(room);
+        else if(game==='battle') battleBroadcast(room);
+        else broadcastRoom(room,{type:'checkersState',state:room.checkersState});
       }
       return;
     }
@@ -179,6 +180,21 @@ wss.on('connection', ws=>{
       room.turn=hit?player.role:opp.role;player.battlePending=false;
       send(player.ws,{type:'battleShotAck',i,hit,sunk,turn:room.turn,role:player.role});
       battleBroadcast(room);return;
+    }
+    if(room.game==='ck' && m.type==='checkersState'){
+      const state=m.state;
+      if(!state || !Array.isArray(state.board) || state.board.length!==8 ||
+         !state.board.every(row=>Array.isArray(row) && row.length===8)) return;
+      const allowed=new Set(['','r','y']);
+      if(!state.board.every(row=>row.every(cell=>allowed.has(cell)))) return;
+      room.checkersState={
+        board:state.board.map(row=>row.slice()),
+        turn:state.turn,
+        over:!!state.over,
+        chain:state.chain ?? null
+      };
+      broadcastRoom(room,{type:'checkersState',state:room.checkersState});
+      return;
     }
   });
   ws.on('close',()=>removePlayer(ws));
