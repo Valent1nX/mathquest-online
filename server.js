@@ -182,16 +182,26 @@ wss.on('connection', ws=>{
       battleBroadcast(room);return;
     }
     if(room.game==='ck' && m.type==='checkersState'){
-      const state=m.state;
-      if(!state || !Array.isArray(state.board) || state.board.length!==8 ||
-         !state.board.every(row=>Array.isArray(row) && row.length===8)) return;
-      const allowed=new Set(['','r','y']);
-      if(!state.board.every(row=>row.every(cell=>allowed.has(cell)))) return;
+      const state=m.state || m;
+      if(!state || !Array.isArray(state.board)) return;
+
+      // The Math Quest client uses a flat 64-cell board. Accept that format
+      // and normalize it on the server so both players receive the same state.
+      let board;
+      if(state.board.length===64 && state.board.every(cell=>typeof cell==='string')){
+        board=state.board.slice();
+      }else if(state.board.length===8 && state.board.every(row=>Array.isArray(row) && row.length===8)){
+        board=state.board.flat().slice();
+      }else return;
+
+      const allowed=new Set(['','r','y','R','Y']);
+      if(!board.every(cell=>allowed.has(cell))) return;
+
       room.checkersState={
-        board:state.board.map(row=>row.slice()),
-        turn:state.turn,
+        board,
+        turn:state.turn==='y'||state.turn==='B'?'y':'r',
         over:!!state.over,
-        chain:state.chain ?? null
+        chain:!!state.chain
       };
       broadcastRoom(room,{type:'checkersState',state:room.checkersState});
       return;
